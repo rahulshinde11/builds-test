@@ -1,0 +1,57 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: arm-build-test
+  namespace: ai-build-server
+spec:
+  activeDeadlineSeconds: 3600
+  backoffLimit: 1
+  template:
+    metadata:
+      name: arm-build-test
+      namespace: ai-build-server
+      initContainers:
+        - name: init-clone-repo
+          image: alpine
+          command:
+            - sh
+            - '-c'
+          args:
+            - >-
+              apk apk update && apk add --no-cache git openssh &&
+
+              git clone
+              https://github.com/rahulshinde11/builds-test.git
+              /context &&
+               cd /context && git checkout master --detach
+          imagePullPolicy: Always
+      containers:
+        - name: kaniko
+          image: 'gcr.io/kaniko-project/executor:v0.15.0'
+          args:
+            - '--dockerfile=/context/Dockerfile'
+            - '--context=/context'
+            - '--no-push'
+          resources:
+            limits:
+              cpu: 1900m
+              memory: 7680Mi
+            requests:
+              cpu: 1900m
+              memory: 7680Mi
+          volumeMounts:
+            - name: context
+              mountPath: /context
+            - name: docker-mount
+              mountPath: /context/Dockerfile
+              subPath: Dockerfile
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        kops.k8s.io/instancegroup: builds-node
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: builds
+          effect: NoSchedule
